@@ -1,3 +1,4 @@
 data/
 config/secrets.php
 images/
+.DS_Store
