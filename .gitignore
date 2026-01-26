@@ -2,3 +2,5 @@ data/
 config/secrets.php
 images/
 .DS_Store
+node/.env
+node/node_modules/

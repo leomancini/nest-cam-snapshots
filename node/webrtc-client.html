@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Nest WebRTC Capture</title>
+</head>
+<body>
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+    <script>
+        let peerConnection = null;
+
+        window.initWebRTC = async function() {
+            return new Promise(async (resolve, reject) => {
+                try {
+                    peerConnection = new RTCPeerConnection({
+                        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                    });
+
+                    // Add transceivers as recvonly (required by Nest)
+                    peerConnection.addTransceiver('audio', { direction: 'recvonly' });
+
+                    const videoTransceiver = peerConnection.addTransceiver('video', { direction: 'recvonly' });
+
+                    // Set codec preferences to prefer H264 for best quality
+                    const capabilities = RTCRtpReceiver.getCapabilities('video');
+                    if (capabilities && videoTransceiver.setCodecPreferences) {
+                        const h264Codecs = capabilities.codecs.filter(c =>
+                            c.mimeType.toLowerCase() === 'video/h264'
+                        );
+                        const otherCodecs = capabilities.codecs.filter(c =>
+                            c.mimeType.toLowerCase() !== 'video/h264'
+                        );
+                        videoTransceiver.setCodecPreferences([...h264Codecs, ...otherCodecs]);
+                    }
+
+                    // Create data channel (required by Nest - must have application m line)
+                    peerConnection.createDataChannel('dataSendChannel');
+
+                    const video = document.getElementById('video');
+
+                    peerConnection.ontrack = (event) => {
+                        if (event.track.kind === 'video') {
+                            video.srcObject = event.streams[0];
+                        }
+                    };
+
+                    // Create offer
+                    const offer = await peerConnection.createOffer();
+                    await peerConnection.setLocalDescription(offer);
+
+                    // Wait for ICE gathering to complete
+                    await new Promise((resolve) => {
+                        if (peerConnection.iceGatheringState === 'complete') {
+                            resolve();
+                        } else {
+                            peerConnection.onicegatheringstatechange = () => {
+                                if (peerConnection.iceGatheringState === 'complete') {
+                                    resolve();
+                                }
+                            };
+                        }
+                    });
+
+                    // Return the offer SDP as-is (should have recvonly)
+                    resolve(peerConnection.localDescription.sdp);
+                } catch (err) {
+                    reject(err);
+                }
+            });
+        };
+
+        window.setAnswer = async function(answerSdp) {
+            // Chrome with recvonly transceivers expects sendonly in answer
+            // Nest sends sendrecv, so we need to change it to sendonly
+            let modifiedSdp = answerSdp.replace(/a=sendrecv/g, 'a=sendonly');
+
+            await peerConnection.setRemoteDescription({
+                type: 'answer',
+                sdp: modifiedSdp
+            });
+        };
+
+        window.captureFrame = function() {
+            return new Promise((resolve, reject) => {
+                const video = document.getElementById('video');
+                const canvas = document.getElementById('canvas');
+                const ctx = canvas.getContext('2d');
+
+                const capture = () => {
+                    if (video.videoWidth > 0 && video.videoHeight > 0) {
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        ctx.drawImage(video, 0, 0);
+                        // Use maximum JPEG quality (1.0)
+                        resolve(canvas.toDataURL('image/jpeg', 1.0));
+                    } else {
+                        reject(new Error('Video not ready'));
+                    }
+                };
+
+                // Wait for bandwidth adaptation to achieve higher resolution
+                // WebRTC streams start at lower resolution and improve as bandwidth is measured
+                const waitForHighRes = (attempts = 0) => {
+                    if (video.readyState >= 2 && video.videoWidth > 0) {
+                        // Capture when we have HD+ resolution or have waited ~5 seconds
+                        if (video.videoWidth >= 1280 || attempts >= 10) {
+                            capture();
+                        } else {
+                            setTimeout(() => waitForHighRes(attempts + 1), 500);
+                        }
+                    } else if (attempts >= 30) {
+                        reject(new Error('Video load timeout'));
+                    } else {
+                        setTimeout(() => waitForHighRes(attempts + 1), 500);
+                    }
+                };
+
+                waitForHighRes();
+            });
+        };
+
+        window.cleanup = function() {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+        };
+    </script>
+</body>
+</html>

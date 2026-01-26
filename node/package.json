@@ -1,0 +1,14 @@
+{
+  "name": "nest-cam-snapshots",
+  "version": "1.0.0",
+  "description": "Snapshot capture for Nest cameras (RTSP and WebRTC)",
+  "main": "saveImage.js",
+  "scripts": {
+    "start": "node saveImage.js",
+    "capture": "node saveImage.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "puppeteer-core": "^23.0.0"
+  }
+}
