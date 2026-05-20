@@ -43,12 +43,9 @@ function findBrowser() {
     throw new Error('No Chrome/Chromium browser found. Please install chromium-browser (Ubuntu) or Google Chrome (macOS).');
 }
 
-async function callNestApi(accessToken, deviceId, offerSdp) {
+function executeCommand(accessToken, deviceId, command, params) {
     return new Promise((resolve, reject) => {
-        const data = JSON.stringify({
-            command: 'sdm.devices.commands.CameraLiveStream.GenerateWebRtcStream',
-            params: { offerSdp: offerSdp }
-        });
+        const data = JSON.stringify({ command, params });
 
         const options = {
             hostname: 'smartdevicemanagement.googleapis.com',
@@ -68,12 +65,10 @@ async function callNestApi(accessToken, deviceId, offerSdp) {
             res.on('end', () => {
                 try {
                     const response = JSON.parse(body);
-                    if (response.results && response.results.answerSdp) {
-                        resolve(response.results.answerSdp);
-                    } else if (response.error) {
+                    if (response.error) {
                         reject(new Error(`API error: ${response.error.message || JSON.stringify(response.error)}`));
                     } else {
-                        reject(new Error(`Unexpected API response: ${body}`));
+                        resolve(response.results || {});
                     }
                 } catch (e) {
                     reject(new Error(`Failed to parse API response: ${e.message}`));
@@ -87,12 +82,35 @@ async function callNestApi(accessToken, deviceId, offerSdp) {
     });
 }
 
+async function generateStream(accessToken, deviceId, offerSdp) {
+    const results = await executeCommand(
+        accessToken, deviceId,
+        'sdm.devices.commands.CameraLiveStream.GenerateWebRtcStream',
+        { offerSdp }
+    );
+    if (!results.answerSdp) {
+        throw new Error('No answerSdp in GenerateWebRtcStream response');
+    }
+    return { answerSdp: results.answerSdp, mediaSessionId: results.mediaSessionId };
+}
+
+// Frees the camera's WebRTC stream slot so the next attempt can connect.
+async function stopStream(accessToken, deviceId, mediaSessionId) {
+    await executeCommand(
+        accessToken, deviceId,
+        'sdm.devices.commands.CameraLiveStream.StopWebRtcStream',
+        { mediaSessionId }
+    );
+}
+
 // Full HD target. Nest's WebRTC stream ramps up from 640x360 over ~20s,
 // but sometimes stalls below HD — so we retry the whole handshake.
 const TARGET_WIDTH = 1920;
 const MAX_ATTEMPTS = 3;
 
 // One full WebRTC handshake + frame grab. Returns { buffer, width, height }.
+// Always stops the Nest stream afterward so the camera's single stream slot
+// is freed for the next attempt.
 async function attemptCapture(browser, accessToken, deviceInfo) {
     const page = await browser.newPage();
     page.on('console', msg => {
@@ -100,6 +118,7 @@ async function attemptCapture(browser, accessToken, deviceInfo) {
         if (text.startsWith('[res]')) console.log(text);
     });
 
+    let mediaSessionId = null;
     try {
         // Set large viewport for high resolution
         await page.setViewport({ width: 1920, height: 1080 });
@@ -108,8 +127,9 @@ async function attemptCapture(browser, accessToken, deviceInfo) {
         await page.goto(`file://${htmlPath}`);
 
         const offerSdp = await page.evaluate(() => window.initWebRTC());
-        const answerSdp = await callNestApi(accessToken, deviceInfo.ID, offerSdp);
-        await page.evaluate((answer) => window.setAnswer(answer), answerSdp);
+        const stream = await generateStream(accessToken, deviceInfo.ID, offerSdp);
+        mediaSessionId = stream.mediaSessionId;
+        await page.evaluate((answer) => window.setAnswer(answer), stream.answerSdp);
 
         const result = await page.evaluate(() => window.captureFrame());
         await page.evaluate(() => window.cleanup());
@@ -121,6 +141,13 @@ async function attemptCapture(browser, accessToken, deviceInfo) {
             height: result.height
         };
     } finally {
+        if (mediaSessionId) {
+            try {
+                await stopStream(accessToken, deviceInfo.ID, mediaSessionId);
+            } catch (error) {
+                console.error(`Failed to stop stream: ${error.message}`);
+            }
+        }
         await page.close();
     }
 }
@@ -158,6 +185,10 @@ async function captureWebRTC(accessToken, deviceInfo, outputPath) {
                 }
             } catch (error) {
                 console.error(`Attempt ${attempt} failed: ${error.message}`);
+            }
+            // Give the camera a moment to release its stream slot before retrying.
+            if (attempt < MAX_ATTEMPTS) {
+                await new Promise(r => setTimeout(r, 5000));
             }
         }
 
