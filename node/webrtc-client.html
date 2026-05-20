@@ -101,8 +101,13 @@
                 // Wait for bandwidth adaptation to achieve higher resolution.
                 // Nest streams start low (~640x360) and ramp up as bandwidth is measured;
                 // headless Chrome on a server takes ~15-30s to reach 1920x1080.
+                let lastLoggedWidth = 0;
                 const waitForHighRes = (attempts = 0) => {
                     if (video.readyState >= 2 && video.videoWidth > 0) {
+                        if (video.videoWidth !== lastLoggedWidth) {
+                            console.log(`[res] t=${(attempts * 0.5).toFixed(1)}s ${video.videoWidth}x${video.videoHeight}`);
+                            lastLoggedWidth = video.videoWidth;
+                        }
                         // Capture when we hit full HD, or fall back after ~45s.
                         if (video.videoWidth >= 1920 || attempts >= 90) {
                             capture();

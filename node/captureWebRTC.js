@@ -108,6 +108,11 @@ async function captureWebRTC(accessToken, deviceInfo, outputPath) {
 
         const page = await browser.newPage();
 
+        page.on('console', msg => {
+            const text = msg.text();
+            if (text.startsWith('[res]')) console.log(text);
+        });
+
         // Set large viewport for high resolution
         await page.setViewport({ width: 1920, height: 1080 });
 
