@@ -98,17 +98,18 @@
                     }
                 };
 
-                // Wait for bandwidth adaptation to achieve higher resolution
-                // WebRTC streams start at lower resolution and improve as bandwidth is measured
+                // Wait for bandwidth adaptation to achieve higher resolution.
+                // Nest streams start low (~640x360) and ramp up as bandwidth is measured;
+                // headless Chrome on a server takes ~15-30s to reach 1920x1080.
                 const waitForHighRes = (attempts = 0) => {
                     if (video.readyState >= 2 && video.videoWidth > 0) {
-                        // Capture when we have HD+ resolution or have waited ~5 seconds
-                        if (video.videoWidth >= 1280 || attempts >= 10) {
+                        // Capture when we hit full HD, or fall back after ~45s.
+                        if (video.videoWidth >= 1920 || attempts >= 90) {
                             capture();
                         } else {
                             setTimeout(() => waitForHighRes(attempts + 1), 500);
                         }
-                    } else if (attempts >= 30) {
+                    } else if (attempts >= 60) {
                         reject(new Error('Video load timeout'));
                     } else {
                         setTimeout(() => waitForHighRes(attempts + 1), 500);
