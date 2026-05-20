@@ -5,7 +5,7 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 process.env.TZ = 'America/New_York';
 
 const PATHS = {
-    IMAGES: path.join(__dirname, '..', 'images')
+    IMAGES: process.env.IMAGES_DIR || path.join(__dirname, '..', 'images')
 };
 
 const SECRETS = {
