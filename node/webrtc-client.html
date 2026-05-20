@@ -125,6 +125,27 @@
             });
         };
 
+        window.getDiagnostics = async function() {
+            if (!peerConnection) return 'no peerConnection';
+            const stats = await peerConnection.getStats();
+            const lines = [];
+            stats.forEach(r => {
+                if (r.type === 'inbound-rtp' && r.kind === 'video') {
+                    lines.push(`[stat] inbound-rtp ${r.frameWidth}x${r.frameHeight} fps=${r.framesPerSecond} bytes=${r.bytesReceived} framesDecoded=${r.framesDecoded}`);
+                }
+                if (r.type === 'candidate-pair' && r.nominated) {
+                    lines.push(`[stat] candidate-pair state=${r.state} availIncoming=${r.availableIncomingBitrate} rtt=${r.currentRoundTripTime}`);
+                }
+                if (r.type === 'local-candidate' && r.candidateType) {
+                    lines.push(`[stat] local-candidate type=${r.candidateType} protocol=${r.protocol}`);
+                }
+                if (r.type === 'remote-candidate' && r.candidateType) {
+                    lines.push(`[stat] remote-candidate type=${r.candidateType} protocol=${r.protocol}`);
+                }
+            });
+            return lines.join('\n');
+        };
+
         window.cleanup = function() {
             if (peerConnection) {
                 peerConnection.close();

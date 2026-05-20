@@ -129,6 +129,13 @@ async function captureWebRTC(accessToken, deviceInfo, outputPath) {
         console.log('Calling Nest API...');
         const answerSdp = await callNestApi(accessToken, deviceInfo.ID, offerSdp);
 
+        const videoSection = answerSdp.split(/^m=/m).find(s => s.startsWith('video'));
+        if (videoSection) {
+            const interesting = ('m=' + videoSection).split(/\r?\n/)
+                .filter(l => /^(m=|b=|a=fmtp:|a=rtpmap:|a=imageattr:)/.test(l));
+            console.log('[sdp] answer video lines:\n' + interesting.map(l => '  ' + l).join('\n'));
+        }
+
         // Set the answer SDP to establish connection
         console.log('Setting SDP answer...');
         await page.evaluate((answer) => window.setAnswer(answer), answerSdp);
@@ -136,6 +143,9 @@ async function captureWebRTC(accessToken, deviceInfo, outputPath) {
         // Wait for video and capture frame (with bandwidth adaptation for high resolution)
         console.log('Waiting for video stream...');
         const dataUrl = await page.evaluate(() => window.captureFrame());
+
+        const diagnostics = await page.evaluate(() => window.getDiagnostics());
+        console.log(diagnostics);
 
         // Cleanup WebRTC connection
         await page.evaluate(() => window.cleanup());
