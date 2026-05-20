@@ -92,7 +92,11 @@
                         canvas.height = video.videoHeight;
                         ctx.drawImage(video, 0, 0);
                         // Use maximum JPEG quality (1.0)
-                        resolve(canvas.toDataURL('image/jpeg', 1.0));
+                        resolve({
+                            dataUrl: canvas.toDataURL('image/jpeg', 1.0),
+                            width: video.videoWidth,
+                            height: video.videoHeight
+                        });
                     } else {
                         reject(new Error('Video not ready'));
                     }

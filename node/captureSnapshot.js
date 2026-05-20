@@ -141,7 +141,7 @@ async function main() {
 
         // Wait for video and capture frame (with bandwidth adaptation for high resolution)
         console.log('Waiting for video stream...');
-        const dataUrl = await page.evaluate(() => window.captureFrame());
+        const { dataUrl } = await page.evaluate(() => window.captureFrame());
 
         // Cleanup WebRTC connection
         await page.evaluate(() => window.cleanup());
