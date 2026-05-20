@@ -186,9 +186,10 @@ async function captureWebRTC(accessToken, deviceInfo, outputPath) {
             } catch (error) {
                 console.error(`Attempt ${attempt} failed: ${error.message}`);
             }
-            // Give the camera a moment to release its stream slot before retrying.
+            // After a sub-HD attempt the camera is often briefly throttled to
+            // 640x360; wait long enough for it to recover before retrying.
             if (attempt < MAX_ATTEMPTS) {
-                await new Promise(r => setTimeout(r, 5000));
+                await new Promise(r => setTimeout(r, 60000));
             }
         }
 
