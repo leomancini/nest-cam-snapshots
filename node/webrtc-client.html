@@ -2,6 +2,12 @@
 <html>
 <head>
     <title>Nest WebRTC Capture</title>
+    <style>
+        html, body { margin: 0; padding: 0; background: #000; }
+        /* A full-HD-sized, visible video element tells Chrome to request
+           1920x1080 from the sender instead of staying locked at 640x360. */
+        #video { width: 1920px; height: 1080px; object-fit: fill; display: block; }
+    </style>
 </head>
 <body>
     <video id="video" autoplay playsinline muted></video>
